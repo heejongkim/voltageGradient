@@ -1,7 +1,7 @@
 // this is a working version with master calibration capability, it can be used as master to control another units for parallel operation
 // it also has function to calibrate slave with master calibration, so that the two units has very close calibration
 // LCD display is enabled as well
-// https://github.com/fmalpartida/New-LiquidCrystal <- header files should be added to arduino IDE via library manager (entire repo's zip file should work)
+// https://github.com/fmalpartida/New-LiquidCrystal <- header files should be added to arduino IDE via library manager (entire repo's zip file should work) -- hjk
 
 #include <EEPROM.h>
 #include <Wire.h>
@@ -1051,7 +1051,7 @@ void ChangOutputState() {
   lcd.clear();
 }
 
-void ChangOutputStateManual(int OutputStatus) {
+void ChangOutputStateManual(int OutputStatus) { // for output enable/disable via USB communication 
   lcd.clear();
   //OutputStatus = 1 - OutputStatus;
   lcd.setCursor (0, 1);
@@ -1264,7 +1264,7 @@ void checkMainSerialInput()
       Calibration(calibrationType/2, calibrationType%2 );
       caliType[calibrationType/2] = calibrationType%2;
     }
-    if (CMD == 'R' ) {  // no value put just "R=" should be ok -- hjk
+    if (CMD == 'R' ) {  // 1 - output enable, 0 - disable -- hjk
       ChangOutputStateManual(OutputStatus = (int) input );
     }
 
@@ -1272,7 +1272,7 @@ void checkMainSerialInput()
     if (CMD == 'P' ) {                      //this is to set output polarity normal or reversed, must use a reverse control box
      // rpDirection = (int) input;
      // digitalWrite(rpControlPin, rpDirection);
-       rpDirection = (int) input; // 1- rpDirection;
+       rpDirection = (int) input; // 1- rpDirection;  // modified so that polarity can be explicitly directed -- hjk
        reverseStatus = 1;
     }
   }
