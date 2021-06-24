@@ -1,5 +1,6 @@
 ## last updated: 2021.06.23
 import warnings
+import re
 import win32com.client as win32
 import serial
 import serial.tools.list_ports
