@@ -1,7 +1,8 @@
 ## last updated: 2021.06.23
-
+import warnings
 import win32com.client as win32
 import serial
+import serial.tools.list_ports
 import datetime
 from datetime import timedelta
 from time import sleep
@@ -63,8 +64,18 @@ def writeGradientLog(serial_info, gradient_log_filename):
         writer.writerow([getPowerSupplyOutputLine(serial_info)])
 
 ### INITIALIZATION
+# auto detection of arduino port -- https://stackoverflow.com/questions/24214643/python-to-automatically-select-serial-ports-for-arduino
+arduino_ports = [
+    p.device
+    for p in serial.tools.list_ports.comports()
+    if 'Arduino' in p.description  # may need tweaking to match new arduinos
+]
+if not arduino_ports:
+    raise IOError("No Arduino found")
+if len(arduino_ports) > 1:
+    warnings.warn('Multiple Arduinos found - using the first')
 # PowerSupply Communication Info
-serial_info = {"port": "COM30", "baudRate": 9600}
+serial_info = {"port": arduino_ports[0], "baudRate": 9600}
 
 # xcalibur connection
 q = win32.Dispatch("AcqServer.AcqInterfaceSupport1")
