@@ -63,68 +63,66 @@ def writeGradientLog(serial_info, gradient_log_filename):
         writer = csv.writer(f)
         writer.writerow([getPowerSupplyOutputLine(serial_info)])
 
+def arduinoPortDetect():
+    # auto detection of arduino port -- https://stackoverflow.com/questions/24214643/python-to-automatically-select-serial-ports-for-arduino
+    arduino_ports = [
+        p.device
+        for p in serial.tools.list_ports.comports()
+        if 'Arduino' in p.description  # may need tweaking to match new arduinos
+    ]
+    if not arduino_ports:
+        raise IOError("No Arduino found")
+    if len(arduino_ports) > 1:
+        warnings.warn('Multiple Arduinos found - using the first')
+
+    return(arduino_ports[0])
+
+def extractVoltageSchemeFilename(filename):
+    split_raw_filename_by_sp_chars = re.split(r'[`\-=~!@#$%^&*()_+\[\]{};\'\\:"|<,./<>?]', filename)  # https://stackoverflow.com/questions/21023901/how-to-split-at-all-special-characters-with-re-split
+    volt_string = [s for s in split_raw_filename_by_sp_chars if "volt" in s]  # https://stackoverflow.com/questions/4843158/check-if-a-python-list-item-contains-a-string-inside-another-string
+    return(volt_string[0] + ".csv")
+
 ### INITIALIZATION
-# auto detection of arduino port -- https://stackoverflow.com/questions/24214643/python-to-automatically-select-serial-ports-for-arduino
-arduino_ports = [
-    p.device
-    for p in serial.tools.list_ports.comports()
-    if 'Arduino' in p.description  # may need tweaking to match new arduinos
-]
-if not arduino_ports:
-    raise IOError("No Arduino found")
-if len(arduino_ports) > 1:
-    warnings.warn('Multiple Arduinos found - using the first')
 # PowerSupply Communication Info
-serial_info = {"port": arduino_ports[0], "baudRate": 9600}
+serial_info = {"port": arduinoPortDetect(), "baudRate": 9600}
 
 # xcalibur connection
 q = win32.Dispatch("AcqServer.AcqInterfaceSupport1")
+
 # scheduler start
 scheduler = BackgroundScheduler(daemon=True, timezone="utc")
 scheduler.start()
 
 while True:
+    # printing current power supply status while it's idle
     print(getPowerSupplyOutputLine(serial_info))
+    # when acquisition starts:
     if(q.GetRunManagerStatusFromCom == u"Acquiring"):
-        #
+        # Make sure that Power Supply is enabled
         print("Voltage supply Enabled ...")
         with serial.Serial(serial_info['port'], serial_info['baudRate']) as ser:
             ser.write(("R=1").encode('ascii'))
         # Acquisition Start from here
         print("Acquisition Starts ...")
-        # retrieve raw filename
+        # retrieve raw filename from xcalibur
         raw_filename = q.GetMangledRawFilename
         # set log filename
         gradient_log_filename = raw_filename[:-4] + ".csv"
         # retrieve voltage scheme
-        split_raw_filename_by_sp_chars = re.split(r'[`\-=~!@#$%^&*()_+\[\]{};\'\\:"|<,./<>?]', raw_filename)  # https://stackoverflow.com/questions/21023901/how-to-split-at-all-special-characters-with-re-split
-        volt_string = [s for s in split_raw_filename_by_sp_chars if "volt" in s]  # https://stackoverflow.com/questions/4843158/check-if-a-python-list-item-contains-a-string-inside-another-string
-        volt_gradient_filename = volt_string[0] + ".csv"
+        volt_gradient_filename = extractVoltageSchemeFilename(filename = raw_filename)
         ### probably need to put non voltage gradient exception handling here
-        # read voltage scheme into table
+        # read voltage scheme into table - assuming the scheme file is located under the same location where this script is located
         volt_gradient_table = readGradientTable(volt_gradient_filename)
         print(volt_gradient_table)
-        # schedule the gradient
+        # schedule the gradient - nonblocking background scheduling
         scheduleStepVoltage(serial_info, scheduler, volt_gradient_table, gradient_log_filename)
         # print schedule
         scheduler.print_jobs()
 
         # Wait until the acquisition is done
         while(q.GetRunManagerStatusFromCom == u"Acquiring"):
-        #    try:
-        #        print(getPowerSupplyOutputLine(serial_info))
-        #    except:
-        #        pass
-        #    try:
-        #        # log here
-        #        with open(gradient_log_filename,"a") as f:
-        #            writer = csv.writer(f)
-        #            writer.writerow([getPowerSupplyOutputLine(serial_info)])
-        #    except:
-        #        pass
             sleep(5)
             print("Acquisition ...")
-            #print(getPowerSupplyOutputLine(serial_info))
         sleep(1)
         # ensure power set to zero & set polarity to normal
         setPowerSupplyVoltage(serial_info, voltage = 0)
