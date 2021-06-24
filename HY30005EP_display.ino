@@ -1,7 +1,7 @@
 // this is a working version with master calibration capability, it can be used as master to control another units for parallel operation
 // it also has function to calibrate slave with master calibration, so that the two units has very close calibration
 // LCD display is enabled as well
-
+// https://github.com/fmalpartida/New-LiquidCrystal <- header files should be added to arduino IDE via library manager (entire repo's zip file should work)
 
 #include <EEPROM.h>
 #include <Wire.h>
