@@ -1,4 +1,4 @@
-## last updated: 2021.09.18 - 1
+## last updated: 2021.09.18 - 2
 import warnings
 import re
 import win32com.client as win32  # pip install pywin32
@@ -84,7 +84,10 @@ def extractVoltageSchemeFilename(filename):
     volt_string = [s for s in split_raw_filename_by_sp_chars if "volt" in s]  # https://stackoverflow.com/questions/4843158/check-if-a-python-list-item-contains-a-string-inside-another-string
     print(volt_string)
     if volt_string:
-        return(volt_string[0] + ".csv")
+        if os.path.isfile(volt_string[0] + ".csv"):
+            return(volt_string[0] + ".csv")
+        else:
+            return(volt_string) # handling the case where it's specified but doesn't exist
     else:
         return(volt_string) # return empty list
 
