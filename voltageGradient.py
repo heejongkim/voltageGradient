@@ -87,7 +87,7 @@ def extractVoltageSchemeFilename(filename):
         if os.path.isfile(volt_string[0] + ".csv"):
             return(volt_string[0] + ".csv")
         else:
-            return(volt_string) # handling the case where it's specified but doesn't exist
+            return([]) # handling the case where it's specified but doesn't exist
     else:
         return(volt_string) # return empty list
 
