@@ -1,4 +1,4 @@
-## last updated: 2021.09.18 - 2
+## last updated: 2021.11.06 - 1
 import warnings
 import re
 import win32com.client as win32  # pip install pywin32
@@ -6,12 +6,15 @@ import serial                    # pip install pyserial=3.5
 import serial.tools.list_ports
 import datetime
 from datetime import timedelta
+from pytz import timezone
 from time import sleep
 import time
 import pandas as pd
 import csv
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
+import sys
+
 # pip install apscheduler=3.7.0
 
 def getPowerSupplyOutputLine(serial_info):
@@ -91,55 +94,81 @@ def extractVoltageSchemeFilename(filename):
     else:
         return(volt_string) # return empty list
 
-### INITIALIZATION
-# PowerSupply Communication Info
-serial_info = {"port": arduinoPortDetect(), "baudRate": 9600}
+def main():
+    ### INITIALIZATION
+    # PowerSupply Communication Info
+    serial_info = {"port": arduinoPortDetect(), "baudRate": 9600}
 
-# xcalibur connection
-q = win32.Dispatch("AcqServer.AcqInterfaceSupport1")
+    # xcalibur connection
+    q = win32.Dispatch("AcqServer.AcqInterfaceSupport1")
 
-# scheduler start
-scheduler = BackgroundScheduler(daemon=True, timezone="utc")
-scheduler.start()
+    # scheduler start
+    scheduler = BackgroundScheduler(daemon=True, timezone="utc")
+    scheduler.start()
 
-while True:
-    # printing current power supply status while it's idle
-    print(getPowerSupplyOutputLine(serial_info))
-    # when acquisition starts:
-    if(q.GetRunManagerStatusFromCom == u"Acquiring"):
-        # Make sure that Power Supply is enabled
-        print("Voltage supply Enabled ...")
-        with serial.Serial(serial_info['port'], serial_info['baudRate']) as ser:
-            ser.write(("R=1").encode('ascii'))
-        # Acquisition Start from here
-        print("Acquisition Starts ...")
-        # retrieve raw filename from xcalibur
-        raw_filename = q.GetMangledRawFilename
-        # retrieve voltage scheme
-        volt_gradient_filename = extractVoltageSchemeFilename(filename = raw_filename)
-        ### probably need to put non voltage gradient exception handling here
-        if volt_gradient_filename:
-            # set log filename
-            gradient_log_filename = raw_filename[:-4] + ".csv"
-            # read voltage scheme into table - assuming the scheme file is located under the same location where this script is located
-            volt_gradient_table = readGradientTable(volt_gradient_filename)
-            print(volt_gradient_table)
-            # schedule the gradient - nonblocking background scheduling
-            scheduleStepVoltage(serial_info, scheduler, volt_gradient_table, gradient_log_filename)
-            # print schedule
-            scheduler.print_jobs()
-        else: # if filename is empty
-            print("No Voltage scheme in the filename ...")
+    # quick parse for arguments
+    # request by richard, voltage current polarity in order
+    # those values will be applied for "out-of-acqusition" period - mainly washing and loading step in easy LC
+    if len(sys.argv) < 2:
+        print("Default 0V, 0A, and polarity is applied")
+        non_acquisition_setting = {"applied": False, "voltage": 0, "current": 0, "polarity": 1}
+    else:
+        print("User provided setting is applied for non-acquisition phase")
+        non_acquisition_setting = {"applied": False, "voltage": float(sys.argv[1]), "current": float(sys.argv[2]), "polarity": int(sys.argv[3])}
 
-        # Wait until the acquisition is done
-        while(q.GetRunManagerStatusFromCom == u"Acquiring"):
-            sleep(5)
-            print("Acquisition ...", volt_gradient_filename)
-        sleep(1)
-        # ensure power set to zero & set polarity to normal
-        setPowerSupplyVoltage(serial_info, voltage = 0)
-        setPowerSupplyCurrent(serial_info, current = 0)
-        setPowerSupplyPolarity(serial_info, polarity = 1)
-        print("Acquisition Ends ...")
-        sleep(1)
-        
+    while True:
+        # when acquisition starts:
+        if(q.GetRunManagerStatusFromCom == u"Acquiring"):
+            # Make sure that Power Supply is enabled
+            print("Voltage supply Enabled ...")
+            with serial.Serial(serial_info['port'], serial_info['baudRate']) as ser:
+                ser.write(("R=1").encode('ascii'))
+            # Acquisition Start from here
+            print("Acquisition Starts ...")
+            # retrieve raw filename from xcalibur
+            raw_filename = q.GetMangledRawFilename
+            # retrieve voltage scheme
+            volt_gradient_filename = extractVoltageSchemeFilename(filename = raw_filename)
+            ### probably need to put non voltage gradient exception handling here
+            if volt_gradient_filename:
+                # set log filename
+                gradient_log_filename = raw_filename[:-4] + ".csv"
+                # read voltage scheme into table - assuming the scheme file is located under the same location where this script is located
+                volt_gradient_table = readGradientTable(volt_gradient_filename)
+                print(volt_gradient_table)
+                # schedule the gradient - nonblocking background scheduling
+                scheduleStepVoltage(serial_info, scheduler, volt_gradient_table, gradient_log_filename)
+                # print schedule
+                scheduler.print_jobs()
+            else: # if filename is empty
+                print("No Voltage scheme in the filename ...")
+
+            # Wait until the acquisition is done
+            while(q.GetRunManagerStatusFromCom == u"Acquiring"):
+                sleep(5)
+                print(datetime.datetime.now(timezone('EST')).strftime("%Y/%m/%d, %H:%M:%S"), "Acquisition ...", volt_gradient_filename)
+                #print("Acquisition ...", volt_gradient_filename)
+            sleep(1)
+            # ensure power set to zero & set polarity to normal
+            setPowerSupplyVoltage(serial_info, voltage = 0)
+            setPowerSupplyCurrent(serial_info, current = 0)
+            setPowerSupplyPolarity(serial_info, polarity = 1)
+            print("Acquisition Ends ...")
+
+            # reset non_acquisition_setting applied? to False
+            non_acquisition_setting["applied"] = False
+            sleep(1)
+        else:
+            if non_acquisition_setting["applied"] == False:
+                # ensure power set to zero & set polarity to normal
+                setPowerSupplyVoltage(serial_info, voltage = non_acquisition_setting["voltage"])
+                setPowerSupplyCurrent(serial_info, current = non_acquisition_setting["current"])
+                setPowerSupplyPolarity(serial_info, polarity = non_acquisition_setting["polarity"])
+                non_acquisition_setting["applied"] = True
+                print(non_acquisition_setting)
+
+            # printing current power supply status while it's idle
+            print(getPowerSupplyOutputLine(serial_info))
+
+if __name__ == "__main__":
+    main()
